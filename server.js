@@ -146,6 +146,36 @@ function ghostscriptArgs(level) {
         ];
     }
 
+// FAST
+if (level === "fast") {
+
+    return [
+
+        "-sDEVICE=pdfwrite",
+
+        "-dCompatibilityLevel=1.4",
+
+        "-dPDFSETTINGS=/screen",
+
+        "-dDownsampleColorImages=true",
+        "-dColorImageResolution=72",
+        "-dColorImageDownsampleType=/Average",
+
+        "-dDownsampleGrayImages=true",
+        "-dGrayImageResolution=72",
+        "-dGrayImageDownsampleType=/Average",
+
+        "-dDownsampleMonoImages=true",
+        "-dMonoImageResolution=150",
+
+        "-dCompressFonts=true",
+        "-dSubsetFonts=true",
+
+        "-dNOPAUSE",
+        "-dQUIET",
+        "-dBATCH"
+    ];
+}
 
     // QUALITY
     if (level === "quality") {
