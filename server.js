@@ -23,6 +23,12 @@ app.get("/", (req, res) => {
     });
 });
 
+app.get("/api/pdf/compress", (req, res) => {
+    res.json({
+        ok: true,
+        message: "PDF API route is reachable"
+    });
+});
 
 const upload = multer({
     storage: multer.memoryStorage(),
