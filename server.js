@@ -10,17 +10,21 @@ const app = express();
 
 const PORT = process.env.PORT || 10000;
 
-app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type");
-    next();
-});
+
+// ===============================
+// CORS
+// ===============================
 
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type");
+    res.header(
+        "Access-Control-Allow-Methods",
+        "GET,POST,OPTIONS"
+    );
+    res.header(
+        "Access-Control-Allow-Headers",
+        "Content-Type"
+    );
 
     if (req.method === "OPTIONS") {
         return res.sendStatus(204);
@@ -29,12 +33,22 @@ app.use((req, res, next) => {
     next();
 });
 
+
+// ===============================
+// HOME
+// ===============================
+
 app.get("/", (req, res) => {
     res.json({
         ok: true,
         service: "PikaTools PDF Compressor"
     });
 });
+
+
+// ===============================
+// TEST GET ROUTE
+// ===============================
 
 app.get("/api/pdf/compress", (req, res) => {
     res.json({
@@ -43,20 +57,48 @@ app.get("/api/pdf/compress", (req, res) => {
     });
 });
 
+
+// ===============================
+// REQUEST LOGGER
+// ===============================
+
+app.use((req, res, next) => {
+    console.log(
+        "REQUEST:",
+        req.method,
+        req.url
+    );
+
+    next();
+});
+
+
+// ===============================
+// MULTER PDF UPLOAD
+// ===============================
+
 const upload = multer({
+
     storage: multer.memoryStorage(),
+
     limits: {
         fileSize: 25 * 1024 * 1024
     },
+
     fileFilter: (req, file, cb) => {
 
         const isPdf =
             file.mimetype === "application/pdf" ||
-            file.originalname.toLowerCase().endsWith(".pdf");
+            file.originalname
+                .toLowerCase()
+                .endsWith(".pdf");
 
         if (!isPdf) {
+
             return cb(
-                new Error("Only PDF files are allowed.")
+                new Error(
+                    "Only PDF files are allowed."
+                )
             );
         }
 
@@ -65,13 +107,21 @@ const upload = multer({
 });
 
 
+// ===============================
+// GHOSTSCRIPT SETTINGS
+// ===============================
+
 function ghostscriptArgs(level) {
 
+    // EXTREME
     if (level === "extreme") {
 
         return [
+
             "-sDEVICE=pdfwrite",
+
             "-dCompatibilityLevel=1.4",
+
             "-dPDFSETTINGS=/screen",
 
             "-dDownsampleColorImages=true",
@@ -86,6 +136,7 @@ function ghostscriptArgs(level) {
             "-dMonoImageResolution=150",
 
             "-dDetectDuplicateImages=true",
+
             "-dCompressFonts=true",
             "-dSubsetFonts=true",
 
@@ -96,14 +147,19 @@ function ghostscriptArgs(level) {
     }
 
 
+    // QUALITY
     if (level === "quality") {
 
         return [
+
             "-sDEVICE=pdfwrite",
+
             "-dCompatibilityLevel=1.4",
+
             "-dPDFSETTINGS=/printer",
 
             "-dDetectDuplicateImages=true",
+
             "-dCompressFonts=true",
             "-dSubsetFonts=true",
 
@@ -114,9 +170,13 @@ function ghostscriptArgs(level) {
     }
 
 
+    // BALANCED
     return [
+
         "-sDEVICE=pdfwrite",
+
         "-dCompatibilityLevel=1.4",
+
         "-dPDFSETTINGS=/ebook",
 
         "-dDownsampleColorImages=true",
@@ -131,6 +191,7 @@ function ghostscriptArgs(level) {
         "-dMonoImageResolution=200",
 
         "-dDetectDuplicateImages=true",
+
         "-dCompressFonts=true",
         "-dSubsetFonts=true",
 
@@ -140,14 +201,16 @@ function ghostscriptArgs(level) {
     ];
 }
 
-app.use((req, res, next) => {
-    console.log("REQUEST:", req.method, req.url);
-    next();
-});
+
+// ===============================
+// PDF COMPRESS API
+// ===============================
 
 app.post(
     "/api/pdf/compress",
+
     upload.single("file"),
+
     async (req, res) => {
 
         let inputPath = null;
@@ -155,16 +218,60 @@ app.post(
 
         try {
 
+            // ---------------------------
+            // MULTER COMPLETE
+            // ---------------------------
+
+            console.log(
+                "MULTER FINISHED"
+            );
+
+
+            // ---------------------------
+            // CHECK FILE
+            // ---------------------------
+
             if (!req.file) {
+
+                console.log(
+                    "NO PDF FILE RECEIVED"
+                );
+
                 return res.status(400).json({
                     error: "No PDF file received."
                 });
             }
 
 
-            const level =
-                req.body?.level || "balanced";
+            console.log(
+                "PDF RECEIVED:",
+                req.file.originalname
+            );
 
+            console.log(
+                "PDF SIZE:",
+                req.file.size,
+                "bytes"
+            );
+
+
+            // ---------------------------
+            // COMPRESSION LEVEL
+            // ---------------------------
+
+            const level =
+                req.body?.level ||
+                "balanced";
+
+            console.log(
+                "COMPRESSION LEVEL:",
+                level
+            );
+
+
+            // ---------------------------
+            // TEMP FILE PATHS
+            // ---------------------------
 
             const id =
                 crypto.randomUUID();
@@ -184,54 +291,159 @@ app.post(
                 );
 
 
+            console.log(
+                "INPUT PATH:",
+                inputPath
+            );
+
+            console.log(
+                "OUTPUT PATH:",
+                outputPath
+            );
+
+
+            // ---------------------------
+            // SAVE INPUT PDF
+            // ---------------------------
+
             await fs.writeFile(
                 inputPath,
                 req.file.buffer
             );
 
 
+            console.log(
+                "PDF SAVED TO TEMP FILE"
+            );
+
+
+            // ---------------------------
+            // GHOSTSCRIPT ARGUMENTS
+            // ---------------------------
+
             const args = [
+
                 ...ghostscriptArgs(level),
+
                 `-sOutputFile=${outputPath}`,
+
                 inputPath
+
             ];
 
+
+            console.log(
+                "GHOSTSCRIPT ARGUMENTS READY"
+            );
+
+
+            console.log(
+                "STARTING GHOSTSCRIPT..."
+            );
+
+
+            // ---------------------------
+            // RUN GHOSTSCRIPT
+            // ---------------------------
 
             await new Promise(
                 (resolve, reject) => {
 
                     execFile(
+
                         "gs",
+
                         args,
+
                         {
-                            timeout: 5 * 60 * 1000,
-                            maxBuffer: 10 * 1024 * 1024
+                            timeout:
+                                5 * 60 * 1000,
+
+                            maxBuffer:
+                                10 * 1024 * 1024
                         },
-                        
-                                (error, stdout, stderr) => {
-    if (error) {
-        console.error("========== GHOSTSCRIPT FAILED ==========");
-        console.error("Exit code:", error.code);
-        console.error("Signal:", error.signal);
-        console.error("STDOUT:", stdout);
-        console.error("STDERR:", stderr);
-        console.error("========================================");
 
-        reject(
-            new Error(
-                stderr?.trim() ||
-                error.message ||
-                "PDF compression failed."
-            )
-        );
-        return;
-    }
+                        (
+                            error,
+                            stdout,
+                            stderr
+                        ) => {
 
-    resolve();
-}
+                            console.log(
+                                "GHOSTSCRIPT CALLBACK FIRED"
+                            );
+
+
+                            if (error) {
+
+                                console.error(
+                                    "========== GHOSTSCRIPT FAILED =========="
+                                );
+
+                                console.error(
+                                    "Exit code:",
+                                    error.code
+                                );
+
+                                console.error(
+                                    "Signal:",
+                                    error.signal
+                                );
+
+                                console.error(
+                                    "Killed:",
+                                    error.killed
+                                );
+
+                                console.error(
+                                    "STDOUT:",
+                                    stdout
+                                );
+
+                                console.error(
+                                    "STDERR:",
+                                    stderr
+                                );
+
+                                console.error(
+                                    "========================================"
+                                );
+
+
+                                reject(
+                                    new Error(
+
+                                        stderr?.trim() ||
+
+                                        error.message ||
+
+                                        "PDF compression failed."
+
+                                    )
+                                );
+
+                                return;
+                            }
+
+
+                            console.log(
+                                "GHOSTSCRIPT COMPLETED SUCCESSFULLY"
+                            );
+
+
+                            resolve();
+                        }
                     );
-
                 }
+            );
+
+
+            // ---------------------------
+            // READ OUTPUT
+            // ---------------------------
+
+            console.log(
+                "READING COMPRESSED PDF..."
             );
 
 
@@ -241,30 +453,62 @@ app.post(
                 );
 
 
-            /*
-             * Never send a larger PDF.
-             */
+            console.log(
+                "OUTPUT SIZE:",
+                output.length,
+                "bytes"
+            );
+
+
+            // ---------------------------
+            // NEVER RETURN LARGER FILE
+            // ---------------------------
+
+            const compressed =
+                output.length <
+                req.file.size;
+
+
             const finalBuffer =
-                output.length < req.file.size
+                compressed
                     ? output
                     : req.file.buffer;
 
 
-            const compressed =
-                output.length < req.file.size;
+            console.log(
+                "FINAL SIZE:",
+                finalBuffer.length,
+                "bytes"
+            );
 
+
+            console.log(
+                "COMPRESSED:",
+                compressed
+            );
+
+
+            // ---------------------------
+            // SAFE FILE NAME
+            // ---------------------------
 
             const safeName =
                 req.file.originalname
+
                     .replace(
                         /\.pdf$/i,
                         ""
                     )
+
                     .replace(
                         /[^a-zA-Z0-9._-]/g,
                         "_"
                     );
 
+
+            // ---------------------------
+            // RESPONSE HEADERS
+            // ---------------------------
 
             res.setHeader(
                 "Content-Type",
@@ -274,48 +518,95 @@ app.post(
 
             res.setHeader(
                 "Content-Disposition",
+
                 `attachment; filename="${safeName}${compressed ? "-compressed" : ""}.pdf"`
             );
 
 
             res.setHeader(
                 "X-Original-Size",
-                String(req.file.size)
+
+                String(
+                    req.file.size
+                )
             );
 
 
             res.setHeader(
                 "X-Compressed-Size",
-                String(finalBuffer.length)
+
+                String(
+                    finalBuffer.length
+                )
             );
 
 
-            res.send(finalBuffer);
+            // ---------------------------
+            // SEND PDF
+            // ---------------------------
 
-        } catch (error) {
+            console.log(
+                "SENDING PDF TO CLIENT..."
+            );
+
+
+            res.send(
+                finalBuffer
+            );
+
+
+            console.log(
+                "PDF RESPONSE SENT"
+            );
+
+        }
+
+
+        // ===============================
+        // ERROR
+        // ===============================
+
+        catch (error) {
 
             console.error(
-                "PDF API error:",
+                "========== PDF API ERROR =========="
+            );
+
+            console.error(
                 error
+            );
+
+            console.error(
+                "==================================="
             );
 
 
             if (!res.headersSent) {
 
                 res.status(500).json({
+
                     error:
                         error.message ||
+
                         "PDF compression failed."
+
                 });
             }
+        }
 
-        } finally {
+
+        // ===============================
+        // CLEANUP
+        // ===============================
+
+        finally {
 
             if (inputPath) {
 
                 await fs
                     .unlink(inputPath)
                     .catch(() => {});
+
             }
 
 
@@ -324,25 +615,50 @@ app.post(
                 await fs
                     .unlink(outputPath)
                     .catch(() => {});
+
             }
+
+
+            console.log(
+                "TEMP FILE CLEANUP COMPLETE"
+            );
         }
     }
 );
 
 
+// ===============================
+// GLOBAL ERROR HANDLER
+// ===============================
+
 app.use(
     (error, req, res, next) => {
 
-        console.error(error);
+        console.error(
+            "GLOBAL ERROR:",
+            error
+        );
 
-        res.status(400).json({
-            error:
-                error.message ||
-                "Request failed."
-        });
+
+        if (!res.headersSent) {
+
+            res.status(400).json({
+
+                error:
+                    error.message ||
+
+                    "Request failed."
+
+            });
+
+        }
     }
 );
 
+
+// ===============================
+// START SERVER
+// ===============================
 
 app.listen(
     PORT,
@@ -352,5 +668,6 @@ app.listen(
         console.log(
             `PikaTools PDF backend running on port ${PORT}`
         );
+
     }
 );
