@@ -207,26 +207,28 @@ app.post(
                             timeout: 5 * 60 * 1000,
                             maxBuffer: 10 * 1024 * 1024
                         },
-                        (error, stdout, stderr) => {
+                        
+                                (error, stdout, stderr) => {
+    if (error) {
+        console.error("========== GHOSTSCRIPT FAILED ==========");
+        console.error("Exit code:", error.code);
+        console.error("Signal:", error.signal);
+        console.error("STDOUT:", stdout);
+        console.error("STDERR:", stderr);
+        console.error("========================================");
 
-                            if (error) {
+        reject(
+            new Error(
+                stderr?.trim() ||
+                error.message ||
+                "PDF compression failed."
+            )
+        );
+        return;
+    }
 
-                                console.error(
-                                    "Ghostscript error:",
-                                    stderr || error.message
-                                );
-
-                                reject(
-                                    new Error(
-                                        "PDF compression failed."
-                                    )
-                                );
-
-                                return;
-                            }
-
-                            resolve();
-                        }
+    resolve();
+}
                     );
 
                 }
