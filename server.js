@@ -169,36 +169,35 @@ function ghostscriptArgs(level) {
         ];
     }
 
+// BALANCED
+return [
 
-    // BALANCED
-    return [
+    "-sDEVICE=pdfwrite",
 
-        "-sDEVICE=pdfwrite",
+    "-dCompatibilityLevel=1.4",
 
-        "-dCompatibilityLevel=1.4",
+    "-dPDFSETTINGS=/ebook",
 
-        "-dPDFSETTINGS=/ebook",
+    "-dDownsampleColorImages=true",
+    "-dColorImageResolution=110",
+    "-dColorImageDownsampleType=/Average",
 
-        "-dDownsampleColorImages=true",
-        "-dColorImageResolution=110",
-        "-dColorImageDownsampleType=/Bicubic",
+    "-dDownsampleGrayImages=true",
+    "-dGrayImageResolution=110",
+    "-dGrayImageDownsampleType=/Average",
 
-        "-dDownsampleGrayImages=true",
-        "-dGrayImageResolution=110",
-        "-dGrayImageDownsampleType=/Bicubic",
+    "-dDownsampleMonoImages=true",
+    "-dMonoImageResolution=200",
 
-        "-dDownsampleMonoImages=true",
-        "-dMonoImageResolution=200",
+    "-dCompressFonts=true",
+    "-dSubsetFonts=true",
 
-        "-dDetectDuplicateImages=true",
-
-        "-dCompressFonts=true",
-        "-dSubsetFonts=true",
-
-        "-dNOPAUSE",
-        "-dQUIET",
-        "-dBATCH"
-    ];
+    "-dNOPAUSE",
+    "-dQUIET",
+    "-dBATCH"
+];
+    
+        
 }
 
 
