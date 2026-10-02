@@ -293,7 +293,6 @@ function ghostscriptArgs() {
 
         "-dPDFSETTINGS=/screen",
 
-
         // ---------------------------------------------
         // COLOR IMAGES
         // ---------------------------------------------
@@ -303,7 +302,6 @@ function ghostscriptArgs() {
         "-dColorImageResolution=96",
 
         "-dColorImageDownsampleType=/Average",
-
 
         // ---------------------------------------------
         // GRAYSCALE IMAGES
@@ -315,7 +313,6 @@ function ghostscriptArgs() {
 
         "-dGrayImageDownsampleType=/Average",
 
-
         // ---------------------------------------------
         // MONOCHROME IMAGES
         // ---------------------------------------------
@@ -323,7 +320,6 @@ function ghostscriptArgs() {
         "-dDownsampleMonoImages=true",
 
         "-dMonoImageResolution=150",
-
 
         // ---------------------------------------------
         // JPEG COMPRESSION
@@ -339,7 +335,6 @@ function ghostscriptArgs() {
 
         "-dJPEGQ=65",
 
-
         // ---------------------------------------------
         // PDF OPTIMIZATION
         // ---------------------------------------------
@@ -349,7 +344,6 @@ function ghostscriptArgs() {
         "-dCompressFonts=true",
 
         "-dSubsetFonts=true",
-
 
         // ---------------------------------------------
         // GHOSTSCRIPT
@@ -516,10 +510,6 @@ app.post(
             );
 
 
-            // -----------------------------------------
-            // CHECK FILE
-            // -----------------------------------------
-
             if (!req.file) {
 
                 console.log(
@@ -549,10 +539,6 @@ app.post(
                 "bytes"
             );
 
-
-            // -----------------------------------------
-            // TEMP FILE PATHS
-            // -----------------------------------------
 
             const id =
                 crypto.randomUUID();
@@ -680,10 +666,6 @@ app.post(
                     );
 
 
-                // -----------------------------------------
-                // Ghostscript reduced the PDF
-                // -----------------------------------------
-
                 if (
                     gsOutput &&
                     gsOutput.length <
@@ -727,10 +709,6 @@ app.post(
                 }
 
 
-                // -----------------------------------------
-                // Ghostscript didn't reduce it
-                // -----------------------------------------
-
                 console.log(
                     "GHOSTSCRIPT DID NOT REDUCE SIZE"
                 );
@@ -755,10 +733,6 @@ app.post(
 
                 }
 
-
-                // -----------------------------------------
-                // Neither method reduced it
-                // -----------------------------------------
 
                 console.log(
                     "NO SMALLER VERSION FOUND"
@@ -792,10 +766,6 @@ app.post(
                 );
 
 
-                // -----------------------------------------
-                // QPDF fallback
-                // -----------------------------------------
-
                 if (
                     qpdfOutput &&
                     qpdfOutput.length <
@@ -820,10 +790,6 @@ app.post(
 
                 }
 
-
-                // -----------------------------------------
-                // Original fallback
-                // -----------------------------------------
 
                 console.log(
                     "RETURNING ORIGINAL PDF"
@@ -872,10 +838,6 @@ app.post(
 
 
         } finally {
-
-            // -----------------------------------------
-            // CLEAN TEMP FILES
-            // -----------------------------------------
 
             if (inputPath) {
 
@@ -934,10 +896,6 @@ app.post(
             );
 
 
-            // -----------------------------------------
-            // CHECK FILE
-            // -----------------------------------------
-
             if (!req.file) {
 
                 return res
@@ -949,10 +907,6 @@ app.post(
 
             }
 
-
-            // -----------------------------------------
-            // CHECK PASSWORD
-            // -----------------------------------------
 
             const password =
                 typeof req.body?.password === "string"
@@ -1009,10 +963,6 @@ app.post(
             );
 
 
-            // -----------------------------------------
-            // TEMP FILES
-            // -----------------------------------------
-
             const id =
                 crypto.randomUUID();
 
@@ -1042,19 +992,11 @@ app.post(
             );
 
 
-            // -----------------------------------------
-            // RANDOM OWNER PASSWORD
-            // -----------------------------------------
-
             const ownerPassword =
                 crypto
                     .randomBytes(32)
                     .toString("hex");
 
-
-            // =================================================
-            // QPDF PASSWORD ENCRYPTION
-            // =================================================
 
             console.log(
                 "STARTING QPDF PDF ENCRYPTION..."
@@ -1085,10 +1027,6 @@ app.post(
             );
 
 
-            // -----------------------------------------
-            // READ PROTECTED PDF
-            // -----------------------------------------
-
             const protectedPdf =
                 await fs.readFile(
                     outputPath
@@ -1114,10 +1052,6 @@ app.post(
             );
 
 
-            // -----------------------------------------
-            // SAFE DOWNLOAD NAME
-            // -----------------------------------------
-
             const safeName =
                 req.file.originalname
                     .replace(
@@ -1129,10 +1063,6 @@ app.post(
                         "_"
                     );
 
-
-            // -----------------------------------------
-            // RESPONSE HEADERS
-            // -----------------------------------------
 
             res.setHeader(
                 "Content-Type",
@@ -1210,10 +1140,6 @@ app.post(
 
         } finally {
 
-            // -----------------------------------------
-            // CLEAN TEMP FILES
-            // -----------------------------------------
-
             if (inputPath) {
 
                 await fs
@@ -1243,7 +1169,7 @@ app.post(
 
 
 // =====================================================
-// PDF UNLOCK API
+// PDF UNLOCK API — PASSWORD OPTIONAL
 // =====================================================
 
 app.post(
@@ -1284,25 +1210,13 @@ app.post(
 
 
             // -----------------------------------------
-            // CHECK PASSWORD
+            // PASSWORD IS OPTIONAL
             // -----------------------------------------
 
             const password =
                 typeof req.body?.password === "string"
                     ? req.body.password
                     : "";
-
-
-            if (!password) {
-
-                return res
-                    .status(400)
-                    .json({
-                        error:
-                            "Password is required."
-                    });
-
-            }
 
 
             if (password.length > 128) {
@@ -1327,6 +1241,13 @@ app.post(
                 "PDF SIZE:",
                 req.file.size,
                 "bytes"
+            );
+
+
+            console.log(
+                password
+                    ? "PASSWORD PROVIDED"
+                    : "NO PASSWORD PROVIDED — TRYING EMPTY PASSWORD"
             );
 
 
@@ -1359,13 +1280,26 @@ app.post(
 
 
             console.log(
-                "LOCKED PDF SAVED FOR UNLOCKING"
+                "PDF SAVED FOR UNLOCKING"
             );
 
 
             // =================================================
             // QPDF DECRYPTION
             // =================================================
+
+            const qpdfArgs = [
+
+                `--password=${password}`,
+
+                "--decrypt",
+
+                inputPath,
+
+                outputPath
+
+            ];
+
 
             console.log(
                 "STARTING QPDF PDF DECRYPTION..."
@@ -1374,15 +1308,7 @@ app.post(
 
             await runCommand(
                 "qpdf",
-                [
-                    `--password=${password}`,
-
-                    "--decrypt",
-
-                    inputPath,
-
-                    outputPath
-                ],
+                qpdfArgs,
                 {
                     timeout:
                         120 * 1000
@@ -1498,10 +1424,6 @@ app.post(
             );
 
 
-            // -----------------------------------------
-            // WRONG PASSWORD / ENCRYPTED PDF ERROR
-            // -----------------------------------------
-
             const stderr =
                 String(
                     error?.stderr ||
@@ -1509,12 +1431,27 @@ app.post(
                 ).toLowerCase();
 
 
+            const errorMessage =
+                String(
+                    error?.error?.message ||
+                    error?.message ||
+                    ""
+                ).toLowerCase();
+
+
+            const combinedError =
+                `${stderr} ${errorMessage}`;
+
+
+            // -----------------------------------------
+            // PASSWORD REQUIRED / WRONG PASSWORD
+            // -----------------------------------------
+
             if (
-                stderr.includes("password") ||
-                stderr.includes("incorrect password") ||
-                stderr.includes("invalid password") ||
-                stderr.includes("invalid encryption") ||
-                stderr.includes("encrypted")
+                combinedError.includes("password") ||
+                combinedError.includes("invalid password") ||
+                combinedError.includes("incorrect password") ||
+                combinedError.includes("encrypted")
             ) {
 
                 if (!res.headersSent) {
@@ -1523,13 +1460,19 @@ app.post(
                         .status(400)
                         .json({
                             error:
-                                "Incorrect password or the PDF could not be decrypted."
+                                password
+                                    ? "Incorrect password. Please check the password and try again."
+                                    : "This PDF requires a password to unlock."
                         });
 
                 }
 
             }
 
+
+            // -----------------------------------------
+            // GENERIC UNLOCK ERROR
+            // -----------------------------------------
 
             if (!res.headersSent) {
 
