@@ -9,14 +9,27 @@ import crypto from "crypto";
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+
 // =====================================================
 // CORS
 // =====================================================
 
 app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type");
+
+    res.header(
+        "Access-Control-Allow-Origin",
+        "*"
+    );
+
+    res.header(
+        "Access-Control-Allow-Methods",
+        "GET,POST,OPTIONS"
+    );
+
+    res.header(
+        "Access-Control-Allow-Headers",
+        "Content-Type"
+    );
 
     if (req.method === "OPTIONS") {
         return res.sendStatus(204);
@@ -25,42 +38,61 @@ app.use((req, res, next) => {
     next();
 });
 
+
 // =====================================================
 // HOME
 // =====================================================
 
 app.get("/", (req, res) => {
+
     res.json({
         ok: true,
         service: "PikaTools PDF Compressor"
     });
+
 });
+
 
 // =====================================================
 // TEST ROUTE
 // =====================================================
 
-app.get("/api/pdf/compress", (req, res) => {
-    res.json({
-        ok: true,
-        message: "PDF API route is reachable"
-    });
-});
+app.get(
+    "/api/pdf/compress",
+    (req, res) => {
+
+        res.json({
+            ok: true,
+            message: "PDF API route is reachable"
+        });
+
+    }
+);
+
 
 // =====================================================
 // REQUEST LOGGER
 // =====================================================
 
 app.use((req, res, next) => {
-    console.log("REQUEST:", req.method, req.url);
+
+    console.log(
+        "REQUEST:",
+        req.method,
+        req.url
+    );
+
     next();
+
 });
+
 
 // =====================================================
 // MULTER
 // =====================================================
 
 const upload = multer({
+
     storage: multer.memoryStorage(),
 
     limits: {
@@ -68,69 +100,119 @@ const upload = multer({
     },
 
     fileFilter: (req, file, cb) => {
+
         const isPdf =
             file.mimetype === "application/pdf" ||
-            file.originalname.toLowerCase().endsWith(".pdf");
+            file.originalname
+                .toLowerCase()
+                .endsWith(".pdf");
 
         if (!isPdf) {
-            return cb(new Error("Only PDF files are allowed."));
+
+            return cb(
+                new Error(
+                    "Only PDF files are allowed."
+                )
+            );
+
         }
 
         cb(null, true);
+
     }
+
 });
+
 
 // =====================================================
 // COMMAND HELPER
 // =====================================================
 
-function runCommand(command, args, options = {}) {
-    return new Promise((resolve, reject) => {
-        execFile(
-            command,
-            args,
-            {
-                timeout: 120 * 1000,
-                maxBuffer: 10 * 1024 * 1024,
-                ...options
-            },
-            (error, stdout, stderr) => {
-                if (error) {
-                    reject({
-                        error,
+function runCommand(
+    command,
+    args,
+    options = {}
+) {
+
+    return new Promise(
+        (resolve, reject) => {
+
+            execFile(
+                command,
+                args,
+                {
+                    timeout:
+                        120 * 1000,
+
+                    maxBuffer:
+                        10 * 1024 * 1024,
+
+                    ...options
+                },
+
+                (
+                    error,
+                    stdout,
+                    stderr
+                ) => {
+
+                    if (error) {
+
+                        reject({
+                            error,
+                            stdout,
+                            stderr
+                        });
+
+                        return;
+                    }
+
+                    resolve({
                         stdout,
                         stderr
                     });
 
-                    return;
                 }
+            );
 
-                resolve({
-                    stdout,
-                    stderr
-                });
-            }
-        );
-    });
+        }
+    );
+
 }
 
+
 // =====================================================
-// QPDF QUICK OPTIMIZATION
+// QPDF OPTIMIZATION
 // =====================================================
 
-async function tryQpdf(inputPath, outputPath) {
-    console.log("STARTING QPDF QUICK OPTIMIZATION...");
+async function tryQpdf(
+    inputPath,
+    outputPath
+) {
+
+    console.log(
+        "STARTING QPDF QUICK OPTIMIZATION..."
+    );
 
     try {
-        await runCommand("qpdf", [
-            "--stream-data=compress",
-            "--compress-streams=y",
-            "--object-streams=generate",
-            inputPath,
-            outputPath
-        ]);
 
-        const output = await fs.readFile(outputPath);
+        await runCommand(
+            "qpdf",
+            [
+                "--stream-data=compress",
+                "--compress-streams=y",
+                "--object-streams=generate",
+                inputPath,
+                outputPath
+            ]
+        );
+
+
+        const output =
+            await fs.readFile(
+                outputPath
+            );
+
 
         console.log(
             "QPDF OUTPUT SIZE:",
@@ -138,9 +220,14 @@ async function tryQpdf(inputPath, outputPath) {
             "bytes"
         );
 
+
         return output;
+
     } catch (result) {
-        console.error("QPDF FAILED");
+
+        console.error(
+            "QPDF FAILED"
+        );
 
         console.error(
             result?.stderr ||
@@ -148,168 +235,100 @@ async function tryQpdf(inputPath, outputPath) {
             "Unknown qpdf error"
         );
 
+
         return null;
+
     }
+
 }
+
 
 // =====================================================
 // GHOSTSCRIPT SETTINGS
 // =====================================================
 
-function ghostscriptArgs(level) {
-
-    // -------------------------------------------------
-    // FAST
-    // -------------------------------------------------
-
-    if (level === "fast") {
-        return [
-            "-sDEVICE=pdfwrite",
-
-            "-dCompatibilityLevel=1.4",
-
-            "-dPDFSETTINGS=/screen",
-
-            // Image compression
-            "-dDownsampleColorImages=true",
-            "-dColorImageResolution=96",
-            "-dColorImageDownsampleType=/Average",
-
-            "-dDownsampleGrayImages=true",
-            "-dGrayImageResolution=96",
-            "-dGrayImageDownsampleType=/Average",
-
-            "-dDownsampleMonoImages=true",
-            "-dMonoImageResolution=150",
-
-            // Compression
-            "-dAutoFilterColorImages=false",
-            "-dColorImageFilter=/DCTEncode",
-
-            "-dAutoFilterGrayImages=false",
-            "-dGrayImageFilter=/DCTEncode",
-
-            "-dJPEGQ=65",
-
-            "-dDetectDuplicateImages=true",
-
-            "-dCompressFonts=true",
-            "-dSubsetFonts=true",
-
-            "-dNOPAUSE",
-            "-dQUIET",
-            "-dBATCH"
-        ];
-    }
-
-    // -------------------------------------------------
-    // EXTREME
-    // -------------------------------------------------
-
-    if (level === "extreme") {
-        return [
-            "-sDEVICE=pdfwrite",
-
-            "-dCompatibilityLevel=1.4",
-
-            "-dPDFSETTINGS=/screen",
-
-            "-dDownsampleColorImages=true",
-            "-dColorImageResolution=72",
-            "-dColorImageDownsampleType=/Bicubic",
-
-            "-dDownsampleGrayImages=true",
-            "-dGrayImageResolution=72",
-            "-dGrayImageDownsampleType=/Bicubic",
-
-            "-dDownsampleMonoImages=true",
-            "-dMonoImageResolution=150",
-
-            "-dAutoFilterColorImages=false",
-            "-dColorImageFilter=/DCTEncode",
-
-            "-dAutoFilterGrayImages=false",
-            "-dGrayImageFilter=/DCTEncode",
-
-            "-dJPEGQ=50",
-
-            "-dDetectDuplicateImages=true",
-
-            "-dCompressFonts=true",
-            "-dSubsetFonts=true",
-
-            "-dNOPAUSE",
-            "-dQUIET",
-            "-dBATCH"
-        ];
-    }
-
-    // -------------------------------------------------
-    // QUALITY
-    // -------------------------------------------------
-
-    if (level === "quality") {
-        return [
-            "-sDEVICE=pdfwrite",
-
-            "-dCompatibilityLevel=1.4",
-
-            "-dPDFSETTINGS=/printer",
-
-            "-dDownsampleColorImages=true",
-            "-dColorImageResolution=150",
-            "-dColorImageDownsampleType=/Average",
-
-            "-dDownsampleGrayImages=true",
-            "-dGrayImageResolution=150",
-            "-dGrayImageDownsampleType=/Average",
-
-            "-dDownsampleMonoImages=true",
-            "-dMonoImageResolution=300",
-
-            "-dDetectDuplicateImages=true",
-
-            "-dCompressFonts=true",
-            "-dSubsetFonts=true",
-
-            "-dNOPAUSE",
-            "-dQUIET",
-            "-dBATCH"
-        ];
-    }
-
-    // -------------------------------------------------
-    // BALANCED
-    // -------------------------------------------------
+function ghostscriptArgs() {
 
     return [
+
         "-sDEVICE=pdfwrite",
 
         "-dCompatibilityLevel=1.4",
 
-        "-dPDFSETTINGS=/ebook",
+        "-dPDFSETTINGS=/screen",
+
+
+        // ---------------------------------------------
+        // COLOR IMAGES
+        // ---------------------------------------------
 
         "-dDownsampleColorImages=true",
-        "-dColorImageResolution=110",
+
+        "-dColorImageResolution=96",
+
         "-dColorImageDownsampleType=/Average",
 
+
+        // ---------------------------------------------
+        // GRAYSCALE IMAGES
+        // ---------------------------------------------
+
         "-dDownsampleGrayImages=true",
-        "-dGrayImageResolution=110",
+
+        "-dGrayImageResolution=96",
+
         "-dGrayImageDownsampleType=/Average",
 
+
+        // ---------------------------------------------
+        // MONOCHROME IMAGES
+        // ---------------------------------------------
+
         "-dDownsampleMonoImages=true",
-        "-dMonoImageResolution=200",
+
+        "-dMonoImageResolution=150",
+
+
+        // ---------------------------------------------
+        // JPEG COMPRESSION
+        // ---------------------------------------------
+
+        "-dAutoFilterColorImages=false",
+
+        "-dColorImageFilter=/DCTEncode",
+
+        "-dAutoFilterGrayImages=false",
+
+        "-dGrayImageFilter=/DCTEncode",
+
+        "-dJPEGQ=65",
+
+
+        // ---------------------------------------------
+        // PDF OPTIMIZATION
+        // ---------------------------------------------
 
         "-dDetectDuplicateImages=true",
 
         "-dCompressFonts=true",
+
         "-dSubsetFonts=true",
 
+
+        // ---------------------------------------------
+        // GHOSTSCRIPT
+        // ---------------------------------------------
+
         "-dNOPAUSE",
+
         "-dQUIET",
+
         "-dBATCH"
+
     ];
+
 }
+
 
 // =====================================================
 // GHOSTSCRIPT
@@ -317,40 +336,46 @@ function ghostscriptArgs(level) {
 
 async function runGhostscript(
     inputPath,
-    outputPath,
-    level
+    outputPath
 ) {
+
     console.log(
-        "STARTING GHOSTSCRIPT:",
-        level
+        "STARTING GHOSTSCRIPT SMART COMPRESSION..."
     );
 
+
     const args = [
-        ...ghostscriptArgs(level),
+
+        ...ghostscriptArgs(),
 
         `-sOutputFile=${outputPath}`,
 
         inputPath
+
     ];
+
 
     console.log(
         "GHOSTSCRIPT ARGS:",
         args.join(" ")
     );
 
+
     await runCommand(
         "gs",
         args,
         {
             timeout:
-                level === "fast"
-                    ? 120 * 1000
-                    : 5 * 60 * 1000
+                120 * 1000
         }
     );
 
+
     const output =
-        await fs.readFile(outputPath);
+        await fs.readFile(
+            outputPath
+        );
+
 
     console.log(
         "GHOSTSCRIPT OUTPUT SIZE:",
@@ -358,8 +383,11 @@ async function runGhostscript(
         "bytes"
     );
 
+
     return output;
+
 }
+
 
 // =====================================================
 // SEND PDF
@@ -370,21 +398,28 @@ function sendPdf(
     file,
     buffer
 ) {
+
     const compressed =
         buffer.length < file.size;
 
+
     const safeName =
         file.originalname
-            .replace(/\.pdf$/i, "")
+            .replace(
+                /\.pdf$/i,
+                ""
+            )
             .replace(
                 /[^a-zA-Z0-9._-]/g,
                 "_"
             );
 
+
     res.setHeader(
         "Content-Type",
         "application/pdf"
     );
+
 
     res.setHeader(
         "Content-Disposition",
@@ -395,26 +430,33 @@ function sendPdf(
         }.pdf"`
     );
 
+
     res.setHeader(
         "X-Original-Size",
         String(file.size)
     );
+
 
     res.setHeader(
         "X-Compressed-Size",
         String(buffer.length)
     );
 
+
     console.log(
         "SENDING PDF TO CLIENT..."
     );
 
+
     res.send(buffer);
+
 
     console.log(
         "PDF RESPONSE SENT"
     );
+
 }
+
 
 // =====================================================
 // PDF COMPRESS API
@@ -430,11 +472,17 @@ app.post(
         let qpdfPath = null;
         let gsPath = null;
 
+
         try {
 
             console.log(
                 "MULTER FINISHED"
             );
+
+
+            // -----------------------------------------
+            // CHECK FILE
+            // -----------------------------------------
 
             if (!req.file) {
 
@@ -442,16 +490,22 @@ app.post(
                     "NO PDF FILE RECEIVED"
                 );
 
-                return res.status(400).json({
-                    error:
-                        "No PDF file received."
-                });
+
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "No PDF file received."
+                    });
+
             }
+
 
             console.log(
                 "PDF RECEIVED:",
                 req.file.originalname
             );
+
 
             console.log(
                 "PDF SIZE:",
@@ -459,17 +513,14 @@ app.post(
                 "bytes"
             );
 
-            const level =
-                req.body?.level ||
-                "balanced";
 
-            console.log(
-                "COMPRESSION LEVEL:",
-                level
-            );
+            // -----------------------------------------
+            // TEMP FILE PATHS
+            // -----------------------------------------
 
             const id =
                 crypto.randomUUID();
+
 
             inputPath =
                 path.join(
@@ -477,11 +528,13 @@ app.post(
                     `pikatools-${id}-input.pdf`
                 );
 
+
             qpdfPath =
                 path.join(
                     os.tmpdir(),
                     `pikatools-${id}-qpdf.pdf`
                 );
+
 
             gsPath =
                 path.join(
@@ -489,239 +542,266 @@ app.post(
                     `pikatools-${id}-gs.pdf`
                 );
 
+
             await fs.writeFile(
                 inputPath,
                 req.file.buffer
             );
 
+
             console.log(
                 "PDF SAVED TO TEMP FILE"
             );
 
+
             // =================================================
-            // FAST MODE
+            // STEP 1 — QPDF
             // =================================================
 
-            if (level === "fast") {
+            const qpdfOutput =
+                await tryQpdf(
+                    inputPath,
+                    qpdfPath
+                );
 
-                const qpdfOutput =
-                    await tryQpdf(
-                        inputPath,
-                        qpdfPath
+
+            let qpdfReduction = 0;
+
+
+            if (qpdfOutput) {
+
+                qpdfReduction =
+                    (
+                        (
+                            1 -
+                            qpdfOutput.length /
+                            req.file.size
+                        ) * 100
                     );
 
-                let qpdfReduction = 0;
 
-                if (qpdfOutput) {
+                console.log(
+                    "QPDF REDUCTION:",
+                    qpdfReduction.toFixed(2),
+                    "%"
+                );
 
-                    qpdfReduction =
+            }
+
+
+            // =================================================
+            // STEP 2 — QPDF RESULT IS GOOD ENOUGH
+            // =================================================
+
+            if (
+                qpdfOutput &&
+                qpdfReduction >= 2
+            ) {
+
+                console.log(
+                    "SMART COMPRESSION:"
+                );
+
+                console.log(
+                    "QPDF PROVIDED MEANINGFUL REDUCTION"
+                );
+
+
+                console.log(
+                    "RETURNING QPDF RESULT"
+                );
+
+
+                return sendPdf(
+                    res,
+                    req.file,
+                    qpdfOutput
+                );
+
+            }
+
+
+            // =================================================
+            // STEP 3 — GHOSTSCRIPT FALLBACK
+            // =================================================
+
+            console.log(
+                "QPDF REDUCTION TOO SMALL."
+            );
+
+
+            console.log(
+                "STARTING GHOSTSCRIPT FALLBACK..."
+            );
+
+
+            try {
+
+                const gsOutput =
+                    await runGhostscript(
+                        inputPath,
+                        gsPath
+                    );
+
+
+                // -----------------------------------------
+                // Ghostscript reduced the PDF
+                // -----------------------------------------
+
+                if (
+                    gsOutput &&
+                    gsOutput.length <
+                    req.file.size
+                ) {
+
+                    console.log(
+                        "GHOSTSCRIPT REDUCED PDF"
+                    );
+
+
+                    console.log(
+                        "FINAL SIZE:",
+                        gsOutput.length,
+                        "bytes"
+                    );
+
+
+                    const reduction =
                         (
                             (
                                 1 -
-                                qpdfOutput.length /
+                                gsOutput.length /
                                 req.file.size
                             ) * 100
                         );
 
+
                     console.log(
-                        "QPDF REDUCTION:",
-                        qpdfReduction.toFixed(2),
-                        "%"
+                        "FINAL REDUCTION:",
+                        reduction.toFixed(1) + "%"
                     );
+
+
+                    return sendPdf(
+                        res,
+                        req.file,
+                        gsOutput
+                    );
+
                 }
 
-                // ---------------------------------------------
-                // Meaningful QPDF reduction
-                // ---------------------------------------------
+
+                // -----------------------------------------
+                // Ghostscript didn't reduce it
+                // -----------------------------------------
+
+                console.log(
+                    "GHOSTSCRIPT DID NOT REDUCE SIZE"
+                );
+
 
                 if (
                     qpdfOutput &&
-                    qpdfReduction >= 2
+                    qpdfOutput.length <
+                    req.file.size
                 ) {
 
                     console.log(
-                        "FAST MODE: QPDF REDUCTION IS MEANINGFUL"
+                        "RETURNING QPDF RESULT"
                     );
+
 
                     return sendPdf(
                         res,
                         req.file,
                         qpdfOutput
                     );
+
                 }
 
-                // ---------------------------------------------
-                // QPDF barely helped
-                // Use Ghostscript image compression
-                // ---------------------------------------------
+
+                // -----------------------------------------
+                // Neither method reduced it
+                // -----------------------------------------
 
                 console.log(
-                    "QPDF REDUCTION TOO SMALL."
+                    "NO SMALLER VERSION FOUND"
                 );
+
 
                 console.log(
-                    "FAST MODE: STARTING LIGHT GHOSTSCRIPT..."
+                    "RETURNING ORIGINAL PDF"
                 );
 
-                try {
 
-                    const gsOutput =
-                        await runGhostscript(
-                            inputPath,
-                            gsPath,
-                            "fast"
-                        );
+                return sendPdf(
+                    res,
+                    req.file,
+                    req.file.buffer
+                );
 
-                    if (
-                        gsOutput &&
-                        gsOutput.length <
-                        req.file.size
-                    ) {
 
-                        console.log(
-                            "FAST MODE: GHOSTSCRIPT REDUCED PDF"
-                        );
+            } catch (gsError) {
 
-                        console.log(
-                            "FINAL SIZE:",
-                            gsOutput.length,
-                            "bytes"
-                        );
+                console.error(
+                    "GHOSTSCRIPT FAILED:"
+                );
 
-                        return sendPdf(
-                            res,
-                            req.file,
-                            gsOutput
-                        );
-                    }
 
-                    // -----------------------------------------
-                    // GS didn't reduce it
-                    // -----------------------------------------
+                console.error(
+                    gsError?.stderr ||
+                    gsError?.error?.message ||
+                    gsError?.message ||
+                    gsError
+                );
+
+
+                // -----------------------------------------
+                // QPDF fallback
+                // -----------------------------------------
+
+                if (
+                    qpdfOutput &&
+                    qpdfOutput.length <
+                    req.file.size
+                ) {
 
                     console.log(
-                        "FAST MODE: GHOSTSCRIPT DID NOT REDUCE SIZE"
+                        "GHOSTSCRIPT FAILED."
                     );
 
-                    if (
-                        qpdfOutput &&
-                        qpdfOutput.length <
-                        req.file.size
-                    ) {
 
-                        console.log(
-                            "FAST MODE: RETURNING QPDF RESULT"
-                        );
+                    console.log(
+                        "RETURNING QPDF RESULT"
+                    );
 
-                        return sendPdf(
-                            res,
-                            req.file,
-                            qpdfOutput
-                        );
-                    }
 
                     return sendPdf(
                         res,
                         req.file,
-                        req.file.buffer
+                        qpdfOutput
                     );
 
-                } catch (gsError) {
-
-                    console.error(
-                        "FAST GHOSTSCRIPT FAILED:"
-                    );
-
-                    console.error(
-                        gsError?.stderr ||
-                        gsError?.error?.message ||
-                        gsError?.message ||
-                        gsError
-                    );
-
-                    // If QPDF made even a tiny improvement,
-                    // return it instead of failing.
-
-                    if (
-                        qpdfOutput &&
-                        qpdfOutput.length <
-                        req.file.size
-                    ) {
-
-                        return sendPdf(
-                            res,
-                            req.file,
-                            qpdfOutput
-                        );
-                    }
-
-                    return sendPdf(
-                        res,
-                        req.file,
-                        req.file.buffer
-                    );
                 }
-            }
 
-            // =================================================
-            // BALANCED / QUALITY / EXTREME
-            // =================================================
 
-            console.log(
-                "USING GHOSTSCRIPT..."
-            );
+                // -----------------------------------------
+                // Original fallback
+                // -----------------------------------------
 
-            const gsOutput =
-                await runGhostscript(
-                    inputPath,
-                    gsPath,
-                    level
+                console.log(
+                    "RETURNING ORIGINAL PDF"
                 );
 
-            let finalBuffer =
-                req.file.buffer;
 
-            if (
-                gsOutput &&
-                gsOutput.length <
-                finalBuffer.length
-            ) {
-
-                finalBuffer =
-                    gsOutput;
-            }
-
-            console.log(
-                "FINAL SIZE:",
-                finalBuffer.length,
-                "bytes"
-            );
-
-            console.log(
-                "ORIGINAL SIZE:",
-                req.file.size,
-                "bytes"
-            );
-
-            const reduction =
-                (
-                    (
-                        1 -
-                        finalBuffer.length /
-                        req.file.size
-                    ) * 100
+                return sendPdf(
+                    res,
+                    req.file,
+                    req.file.buffer
                 );
 
-            console.log(
-                "FINAL REDUCTION:",
-                reduction.toFixed(1) + "%"
-            );
+            }
 
-            return sendPdf(
-                res,
-                req.file,
-                finalBuffer
-            );
 
         } catch (error) {
 
@@ -729,49 +809,74 @@ app.post(
                 "========== PDF API ERROR =========="
             );
 
-            console.error(error);
+
+            console.error(
+                error
+            );
+
 
             console.error(
                 "==================================="
             );
 
+
             if (!res.headersSent) {
 
-                res.status(500).json({
-                    error:
-                        error?.stderr ||
-                        error?.message ||
-                        error?.error?.message ||
-                        "PDF compression failed."
-                });
+                res
+                    .status(500)
+                    .json({
+                        error:
+                            error?.stderr ||
+                            error?.message ||
+                            error?.error?.message ||
+                            "PDF compression failed."
+                    });
+
             }
+
 
         } finally {
 
+            // -----------------------------------------
+            // CLEAN TEMP FILES
+            // -----------------------------------------
+
             if (inputPath) {
+
                 await fs
                     .unlink(inputPath)
                     .catch(() => {});
+
             }
 
+
             if (qpdfPath) {
+
                 await fs
                     .unlink(qpdfPath)
                     .catch(() => {});
+
             }
 
+
             if (gsPath) {
+
                 await fs
                     .unlink(gsPath)
                     .catch(() => {});
+
             }
+
 
             console.log(
                 "TEMP FILE CLEANUP COMPLETE"
             );
+
         }
+
     }
 );
+
 
 // =====================================================
 // GLOBAL ERROR HANDLER
@@ -785,16 +890,22 @@ app.use(
             error
         );
 
+
         if (!res.headersSent) {
 
-            res.status(400).json({
-                error:
-                    error.message ||
-                    "Request failed."
-            });
+            res
+                .status(400)
+                .json({
+                    error:
+                        error.message ||
+                        "Request failed."
+                });
+
         }
+
     }
 );
+
 
 // =====================================================
 // START SERVER
@@ -808,5 +919,6 @@ app.listen(
         console.log(
             `PikaTools PDF backend running on port ${PORT}`
         );
+
     }
 );
