@@ -36,6 +36,7 @@ app.use((req, res, next) => {
     }
 
     next();
+
 });
 
 
@@ -47,14 +48,14 @@ app.get("/", (req, res) => {
 
     res.json({
         ok: true,
-        service: "PikaTools PDF Compressor"
+        service: "PikaTools PDF Backend"
     });
 
 });
 
 
 // =====================================================
-// TEST ROUTE
+// TEST ROUTE — COMPRESS
 // =====================================================
 
 app.get(
@@ -64,6 +65,23 @@ app.get(
         res.json({
             ok: true,
             message: "PDF API route is reachable"
+        });
+
+    }
+);
+
+
+// =====================================================
+// TEST ROUTE — PROTECT
+// =====================================================
+
+app.get(
+    "/api/pdf/protect",
+    (req, res) => {
+
+        res.json({
+            ok: true,
+            message: "PDF Protect API route is reachable"
         });
 
     }
@@ -165,6 +183,7 @@ function runCommand(
                         });
 
                         return;
+
                     }
 
                     resolve({
@@ -390,7 +409,7 @@ async function runGhostscript(
 
 
 // =====================================================
-// SEND PDF
+// SEND PDF — COMPRESS
 // =====================================================
 
 function sendPdf(
@@ -870,6 +889,334 @@ app.post(
 
             console.log(
                 "TEMP FILE CLEANUP COMPLETE"
+            );
+
+        }
+
+    }
+);
+
+
+// =====================================================
+// PDF PASSWORD / PROTECT API
+// =====================================================
+
+app.post(
+    "/api/pdf/protect",
+    upload.single("file"),
+
+    async (req, res) => {
+
+        let inputPath = null;
+        let outputPath = null;
+
+        try {
+
+            console.log(
+                "PDF PROTECT REQUEST RECEIVED"
+            );
+
+
+            // -----------------------------------------
+            // CHECK FILE
+            // -----------------------------------------
+
+            if (!req.file) {
+
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "No PDF file received."
+                    });
+
+            }
+
+
+            // -----------------------------------------
+            // CHECK PASSWORD
+            // -----------------------------------------
+
+            const password =
+                typeof req.body?.password === "string"
+                    ? req.body.password
+                    : "";
+
+
+            if (!password) {
+
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "Password is required."
+                    });
+
+            }
+
+
+            if (password.length < 4) {
+
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "Password must be at least 4 characters."
+                    });
+
+            }
+
+
+            if (password.length > 128) {
+
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "Password must not exceed 128 characters."
+                    });
+
+            }
+
+
+            console.log(
+                "PDF RECEIVED:",
+                req.file.originalname
+            );
+
+
+            console.log(
+                "PDF SIZE:",
+                req.file.size,
+                "bytes"
+            );
+
+
+            // -----------------------------------------
+            // TEMP FILES
+            // -----------------------------------------
+
+            const id =
+                crypto.randomUUID();
+
+
+            inputPath =
+                path.join(
+                    os.tmpdir(),
+                    `pikatools-${id}-protect-input.pdf`
+                );
+
+
+            outputPath =
+                path.join(
+                    os.tmpdir(),
+                    `pikatools-${id}-protected.pdf`
+                );
+
+
+            await fs.writeFile(
+                inputPath,
+                req.file.buffer
+            );
+
+
+            console.log(
+                "PDF SAVED FOR PROTECTION"
+            );
+
+
+            // -----------------------------------------
+            // RANDOM OWNER PASSWORD
+            // -----------------------------------------
+
+            const ownerPassword =
+                crypto
+                    .randomBytes(32)
+                    .toString("hex");
+
+
+            // =================================================
+            // QPDF PASSWORD ENCRYPTION
+            // =================================================
+
+            console.log(
+                "STARTING QPDF PDF ENCRYPTION..."
+            );
+
+
+            await runCommand(
+                "qpdf",
+                [
+                    "--encrypt",
+
+                    password,
+
+                    ownerPassword,
+
+                    "256",
+
+                    "--",
+
+                    inputPath,
+
+                    outputPath
+                ],
+                {
+                    timeout:
+                        120 * 1000
+                }
+            );
+
+
+            // -----------------------------------------
+            // READ PROTECTED PDF
+            // -----------------------------------------
+
+            const protectedPdf =
+                await fs.readFile(
+                    outputPath
+                );
+
+
+            if (
+                !protectedPdf ||
+                protectedPdf.length === 0
+            ) {
+
+                throw new Error(
+                    "Protected PDF could not be created."
+                );
+
+            }
+
+
+            console.log(
+                "PROTECTED PDF SIZE:",
+                protectedPdf.length,
+                "bytes"
+            );
+
+
+            // -----------------------------------------
+            // SAFE DOWNLOAD NAME
+            // -----------------------------------------
+
+            const safeName =
+                req.file.originalname
+                    .replace(
+                        /\.pdf$/i,
+                        ""
+                    )
+                    .replace(
+                        /[^a-zA-Z0-9._-]/g,
+                        "_"
+                    );
+
+
+            // -----------------------------------------
+            // RESPONSE HEADERS
+            // -----------------------------------------
+
+            res.setHeader(
+                "Content-Type",
+                "application/pdf"
+            );
+
+
+            res.setHeader(
+                "Content-Disposition",
+                `attachment; filename="${safeName}-protected.pdf"`
+            );
+
+
+            res.setHeader(
+                "X-Original-Size",
+                String(req.file.size)
+            );
+
+
+            res.setHeader(
+                "X-Protected-Size",
+                String(protectedPdf.length)
+            );
+
+
+            console.log(
+                "SENDING PROTECTED PDF..."
+            );
+
+
+            res.send(
+                protectedPdf
+            );
+
+
+            console.log(
+                "PROTECTED PDF RESPONSE SENT"
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "========== PDF PROTECT ERROR =========="
+            );
+
+
+            console.error(
+                error?.stderr ||
+                error?.error?.message ||
+                error?.message ||
+                error
+            );
+
+
+            console.error(
+                "======================================="
+            );
+
+
+            if (!res.headersSent) {
+
+                res
+                    .status(500)
+                    .json({
+                        error:
+                            error?.stderr ||
+                            error?.error?.message ||
+                            error?.message ||
+                            "PDF protection failed."
+                    });
+
+            }
+
+
+        } finally {
+
+            // -----------------------------------------
+            // CLEAN TEMP FILES
+            // -----------------------------------------
+
+            if (inputPath) {
+
+                await fs
+                    .unlink(inputPath)
+                    .catch(() => {});
+
+            }
+
+
+            if (outputPath) {
+
+                await fs
+                    .unlink(outputPath)
+                    .catch(() => {});
+
+            }
+
+
+            console.log(
+                "PROTECT TEMP FILE CLEANUP COMPLETE"
             );
 
         }
