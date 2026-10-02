@@ -89,6 +89,23 @@ app.get(
 
 
 // =====================================================
+// TEST ROUTE — UNLOCK
+// =====================================================
+
+app.get(
+    "/api/pdf/unlock",
+    (req, res) => {
+
+        res.json({
+            ok: true,
+            message: "PDF Unlock API route is reachable"
+        });
+
+    }
+);
+
+
+// =====================================================
 // REQUEST LOGGER
 // =====================================================
 
@@ -1217,6 +1234,344 @@ app.post(
 
             console.log(
                 "PROTECT TEMP FILE CLEANUP COMPLETE"
+            );
+
+        }
+
+    }
+);
+
+
+// =====================================================
+// PDF UNLOCK API
+// =====================================================
+
+app.post(
+    "/api/pdf/unlock",
+    upload.single("file"),
+
+    async (req, res) => {
+
+        let inputPath = null;
+        let outputPath = null;
+
+        try {
+
+            console.log(
+                "PDF UNLOCK REQUEST RECEIVED"
+            );
+
+
+            // -----------------------------------------
+            // CHECK FILE
+            // -----------------------------------------
+
+            if (!req.file) {
+
+                console.log(
+                    "NO PDF FILE RECEIVED"
+                );
+
+
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "No PDF file received."
+                    });
+
+            }
+
+
+            // -----------------------------------------
+            // CHECK PASSWORD
+            // -----------------------------------------
+
+            const password =
+                typeof req.body?.password === "string"
+                    ? req.body.password
+                    : "";
+
+
+            if (!password) {
+
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "Password is required."
+                    });
+
+            }
+
+
+            if (password.length > 128) {
+
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "Password must not exceed 128 characters."
+                    });
+
+            }
+
+
+            console.log(
+                "PDF RECEIVED:",
+                req.file.originalname
+            );
+
+
+            console.log(
+                "PDF SIZE:",
+                req.file.size,
+                "bytes"
+            );
+
+
+            // -----------------------------------------
+            // TEMP FILES
+            // -----------------------------------------
+
+            const id =
+                crypto.randomUUID();
+
+
+            inputPath =
+                path.join(
+                    os.tmpdir(),
+                    `pikatools-${id}-unlock-input.pdf`
+                );
+
+
+            outputPath =
+                path.join(
+                    os.tmpdir(),
+                    `pikatools-${id}-unlocked.pdf`
+                );
+
+
+            await fs.writeFile(
+                inputPath,
+                req.file.buffer
+            );
+
+
+            console.log(
+                "LOCKED PDF SAVED FOR UNLOCKING"
+            );
+
+
+            // =================================================
+            // QPDF DECRYPTION
+            // =================================================
+
+            console.log(
+                "STARTING QPDF PDF DECRYPTION..."
+            );
+
+
+            await runCommand(
+                "qpdf",
+                [
+                    `--password=${password}`,
+
+                    "--decrypt",
+
+                    inputPath,
+
+                    outputPath
+                ],
+                {
+                    timeout:
+                        120 * 1000
+                }
+            );
+
+
+            // -----------------------------------------
+            // READ UNLOCKED PDF
+            // -----------------------------------------
+
+            const unlockedPdf =
+                await fs.readFile(
+                    outputPath
+                );
+
+
+            if (
+                !unlockedPdf ||
+                unlockedPdf.length === 0
+            ) {
+
+                throw new Error(
+                    "Unlocked PDF could not be created."
+                );
+
+            }
+
+
+            console.log(
+                "UNLOCKED PDF SIZE:",
+                unlockedPdf.length,
+                "bytes"
+            );
+
+
+            // -----------------------------------------
+            // SAFE DOWNLOAD NAME
+            // -----------------------------------------
+
+            const safeName =
+                req.file.originalname
+                    .replace(
+                        /\.pdf$/i,
+                        ""
+                    )
+                    .replace(
+                        /[^a-zA-Z0-9._-]/g,
+                        "_"
+                    );
+
+
+            // -----------------------------------------
+            // RESPONSE HEADERS
+            // -----------------------------------------
+
+            res.setHeader(
+                "Content-Type",
+                "application/pdf"
+            );
+
+
+            res.setHeader(
+                "Content-Disposition",
+                `attachment; filename="${safeName}-unlocked.pdf"`
+            );
+
+
+            res.setHeader(
+                "X-Original-Size",
+                String(req.file.size)
+            );
+
+
+            res.setHeader(
+                "X-Unlocked-Size",
+                String(unlockedPdf.length)
+            );
+
+
+            console.log(
+                "SENDING UNLOCKED PDF..."
+            );
+
+
+            res.send(
+                unlockedPdf
+            );
+
+
+            console.log(
+                "UNLOCKED PDF RESPONSE SENT"
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "========== PDF UNLOCK ERROR =========="
+            );
+
+
+            console.error(
+                error?.stderr ||
+                error?.error?.message ||
+                error?.message ||
+                error
+            );
+
+
+            console.error(
+                "======================================"
+            );
+
+
+            // -----------------------------------------
+            // WRONG PASSWORD / ENCRYPTED PDF ERROR
+            // -----------------------------------------
+
+            const stderr =
+                String(
+                    error?.stderr ||
+                    ""
+                ).toLowerCase();
+
+
+            if (
+                stderr.includes("password") ||
+                stderr.includes("incorrect password") ||
+                stderr.includes("invalid password") ||
+                stderr.includes("invalid encryption") ||
+                stderr.includes("encrypted")
+            ) {
+
+                if (!res.headersSent) {
+
+                    return res
+                        .status(400)
+                        .json({
+                            error:
+                                "Incorrect password or the PDF could not be decrypted."
+                        });
+
+                }
+
+            }
+
+
+            if (!res.headersSent) {
+
+                res
+                    .status(500)
+                    .json({
+                        error:
+                            error?.stderr ||
+                            error?.error?.message ||
+                            error?.message ||
+                            "PDF unlocking failed."
+                    });
+
+            }
+
+
+        } finally {
+
+            // -----------------------------------------
+            // CLEAN TEMP FILES
+            // -----------------------------------------
+
+            if (inputPath) {
+
+                await fs
+                    .unlink(inputPath)
+                    .catch(() => {});
+
+            }
+
+
+            if (outputPath) {
+
+                await fs
+                    .unlink(outputPath)
+                    .catch(() => {});
+
+            }
+
+
+            console.log(
+                "UNLOCK TEMP FILE CLEANUP COMPLETE"
             );
 
         }
